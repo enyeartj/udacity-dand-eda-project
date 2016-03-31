@@ -1,0 +1,129 @@
+# 2016 US Presidential Campaign Finance in Nevada
+## An Exploration by John Enyeart
+
+***
+
+```{r echo=FALSE, message=FALSE, warning=FALSE, packages}
+# Load all of the packages that you end up using
+# in your analysis in this code chunk.
+
+# Notice that the parameter "echo" was set to FALSE for this code chunk.
+# This prevents the code from displaying in the knitted HTML output.
+# You should set echo=FALSE for all code chunks in your file.
+setwd('C:/p4')
+library(ggplot2)
+```
+
+```{r echo=FALSE, Load_the_Data}
+# Load the Data
+pcf <- read.csv('2016PresidentialCampaignFinanceNV.csv')
+# Remove last (junk) column
+pcf <- subset(pcf, select = -X)
+```
+
+# Univariate Plots Section
+### Summary
+```{r echo=FALSE, Summary}
+dim(pcf)
+names(pcf)
+str(pcf)
+levels(pcf$cand_nm)
+summary(pcf)
+```
+
+A cursory look shows that there are 18 variables to work with covering financial
+contributions to 21 candidates. 
+
+Notably missing from the data set is the political party of the candidates. So,
+I will add that data based on the
+[website](http://fec.gov/disclosurep/pnational.do) that the data is from.
+
+```{r echo=FALSE, Adding Political Parties}
+reps <- list("Bush, Jeb", "Carson, Benjamin S.", "Christie, Christopher J.",
+             "Cruz, Rafael Edward 'Ted'", "Fiorina, Carly",
+             "Graham, Lindsey O.", "Huckabee, Mike", "Jindal, Bobby",
+             "Kasich, John R.", "Pataki, George E.", "Paul, Rand",
+             "Perry, James R. (Rick)", "Rubio, Marco", "Santorum, Richard J.",
+             "Trump, Donald J.", "Walker, Scott")
+dems <- list("Clinton, Hillary Rodham", "Lessig, Lawrence",
+             "O'Malley, Martin Joseph", "Sanders, Bernard",
+             "Webb, James Henry Jr.")
+
+pcf$cand_pt <- ifelse(pcf$cand_nm %in% reps, 'R', 'D')
+pcf$cand_pt <- factor(pcf$cand_pt)
+```
+
+# Univariate Analysis
+
+### What is the structure of your dataset?
+
+### What is/are the main feature(s) of interest in your dataset?
+
+### What other features in the dataset do you think will help support your investigation into your feature(s) of interest?
+
+### Did you create any new variables from existing variables in the dataset?
+
+### Of the features you investigated, were there any unusual distributions? Did you perform any operations on the data to tidy, adjust, or change the form of the data? If so, why did you do this?
+
+
+
+# Bivariate Plots Section
+```{r echo=FALSE, Bivariate_Plots}
+
+```
+
+# Bivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the investigation. How did the feature(s) of interest vary with other features in the dataset?
+
+### Did you observe any interesting relationships between the other features (not the main feature(s) of interest)?
+
+### What was the strongest relationship you found?
+
+
+
+
+# Multivariate Plots Section
+
+```{r echo=FALSE, Multivariate_Plots}
+
+```
+
+# Multivariate Analysis
+
+### Talk about some of the relationships you observed in this part of the investigation. Were there features that strengthened each other in terms of looking at your feature(s) of interest?
+
+### Were there any interesting or surprising interactions between features?
+
+### OPTIONAL: Did you create any models with your dataset? Discuss the strengths and limitations of your model.
+
+------
+
+# Final Plots and Summary
+
+### Plot One
+```{r echo=FALSE, Plot_One}
+
+```
+
+### Description One
+
+
+### Plot Two
+```{r echo=FALSE, Plot_Two}
+
+```
+
+### Description Two
+
+
+### Plot Three
+```{r echo=FALSE, Plot_Three}
+
+```
+
+### Description Three
+
+------
+
+# Reflection
