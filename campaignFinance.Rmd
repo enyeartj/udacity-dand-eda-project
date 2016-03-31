@@ -12,6 +12,7 @@
 # You should set echo=FALSE for all code chunks in your file.
 setwd('C:/p4')
 library(ggplot2)
+library(tidyr)
 ```
 
 ```{r echo=FALSE, Load_the_Data}
@@ -22,7 +23,7 @@ pcf <- subset(pcf, select = -X)
 ```
 
 # Univariate Plots Section
-### Summary
+### Summary and Initial Data Cleaning
 ```{r echo=FALSE, Summary}
 dim(pcf)
 names(pcf)
@@ -32,13 +33,26 @@ summary(pcf)
 ```
 
 A cursory look shows that there are 18 variables to work with covering financial
-contributions to 21 candidates. 
+contributions to 21 candidates. The median contribution amount is $50, the mean
+is $188 dollars, and the max is $10,800. According to this summary, the minimum
+contribution amount is -$5,400. There is no mention in the
+[dataset description](ftp://ftp.fec.gov/FEC/Presidential_Map/2016/DATA_DICTIONARIES/CONTRIBUTOR_FORMAT.txt)
+of why a negative number would be included, so I am going to remove any entries
+with a zero or negative contribution amount.
+
+```{r Removing Invalid Contribution Amounts}
+pcf <- subset(pcf, contb_receipt_amt > 0)
+summary(pcf)
+```
+
+Now the minimum contribution is $1 and the mean is up to $203.50. The median and
+max contributions are unchanged.
 
 Notably missing from the data set is the political party of the candidates. So,
 I will add that data based on the
 [website](http://fec.gov/disclosurep/pnational.do) that the data is from.
 
-```{r echo=FALSE, Adding Political Parties}
+```{r Adding Political Parties}
 reps <- list("Bush, Jeb", "Carson, Benjamin S.", "Christie, Christopher J.",
              "Cruz, Rafael Edward 'Ted'", "Fiorina, Carly",
              "Graham, Lindsey O.", "Huckabee, Mike", "Jindal, Bobby",
@@ -51,6 +65,20 @@ dems <- list("Clinton, Hillary Rodham", "Lessig, Lawrence",
 
 pcf$cand_pt <- ifelse(pcf$cand_nm %in% reps, 'R', 'D')
 pcf$cand_pt <- factor(pcf$cand_pt)
+```
+
+Currently, the contribution date variable is in a DD-MMM-YYYY string format,
+which isn't very useful for analysis, so let's split that into three separate
+numeric variables for year, month, and day.
+
+```{r Making Date Variable More Usable}
+pcf <- pcf %>%
+  separate(contb_receipt_dt, c("contb_receipt_dy",
+                               "contb_receipt_mo",
+                               "contb_receipt_yr"), sep = "-")
+pcf$contb_receipt_dy <- as.integer(pcf$contb_receipt_dy)
+pcf$contb_receipt_yr <- as.integer(pcf$contb_receipt_yr)
+pcf$contb_receipt_mo <- match(pcf$contb_receipt_mo, toupper(month.abb))
 ```
 
 # Univariate Analysis
@@ -127,3 +155,15 @@ pcf$cand_pt <- factor(pcf$cand_pt)
 ------
 
 # Reflection
+
+------
+
+# Sources
+
+- Dataset from the
+[Federal Election Commission](http://fec.gov/disclosurep/pnational.do) - *Click
+on "Export Contributor Data" and then "NV.zip" (click on "File Format" for data
+description)*
+- StackOverflow - *[convert mmm to numeric in
+R](http://stackoverflow.com/questions/6549239/convert-mmm-to-numeric-in-r)* for
+converting the month variable.
