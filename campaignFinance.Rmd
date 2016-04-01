@@ -13,6 +13,7 @@
 setwd('C:/p4')
 library(ggplot2)
 library(tidyr)
+library(dplyr)
 ```
 
 ```{r echo=FALSE, Load_the_Data}
@@ -42,7 +43,7 @@ with a zero or negative contribution amount.
 
 ```{r Removing Invalid Contribution Amounts}
 pcf <- subset(pcf, contb_receipt_amt > 0)
-summary(pcf)
+summary(pcf$contb_receipt_amt)
 ```
 
 Now the minimum contribution is $1 and the mean is up to $203.50. The median and
@@ -73,17 +74,202 @@ numeric variables for year, month, and day.
 
 ```{r Making Date Variable More Usable}
 pcf <- pcf %>%
-  separate(contb_receipt_dt, c("contb_receipt_dy",
-                               "contb_receipt_mo",
-                               "contb_receipt_yr"), sep = "-")
-pcf$contb_receipt_dy <- as.integer(pcf$contb_receipt_dy)
-pcf$contb_receipt_yr <- as.integer(pcf$contb_receipt_yr)
-pcf$contb_receipt_mo <- match(pcf$contb_receipt_mo, toupper(month.abb))
+  separate(contb_receipt_dt, c("day",
+                               "month",
+                               "year"), sep = "-")
+pcf$day <- as.integer(pcf$day)
+pcf$year <- as.integer(pcf$year)
+pcf$month <- match(pcf$month, toupper(month.abb))
+```
+
+Let's also make a numeric variable that combines year and month into a single
+value so we can see finer differences in contribution dates on a numeric
+scale.
+
+```{r Combined Numeric Date Variable}
+pcf$year_with_months <- pcf$year + pcf$month / 12
+```
+
+### Number of Contributions
+
+```{r echo=FALSE, Histogram_of_Contribution_Years}
+ggplot(aes(x = year), data = pcf) +
+  geom_histogram(binwidth = 1)
+```
+
+The contributions based on year alone doesn't make a very
+interesting histogram. Let's look at the histogram with the `year_with_months`
+variable that we just created.
+
+```{r echo=FALSE, Histogram_of_Contribution_Years_w_Months}
+ggplot(aes(x = year_with_months), data = pcf) +
+  geom_histogram()
+```
+
+Let's look at it another way: contribution months with a separate plot for each
+year.
+
+```{r echo=FALSE, Histogram_of_Months_Faceted_by_Year}
+ggplot(aes(x = month), data = pcf) +
+  geom_histogram() +
+  facet_wrap(~year)
+```
+
+Alright, I guess that didn't really show us anything we haven't seen yet. Let's
+move on and look at contributions per candidate and per political party.
+
+```{r echo=FALSE, Contributions_per_Candidate}
+pcf.by_cand_nm <- pcf %>% 
+  group_by(cand_nm) %>% 
+  summarise(n = n(),
+            total_amt = sum(contb_receipt_amt),
+            mean_amt = mean(contb_receipt_amt),
+            median_amt = median(contb_receipt_amt)) %>% 
+  arrange(cand_nm)
+
+# Order the names by n
+pcf.by_cand_nm$cand_nm <- factor(
+  pcf.by_cand_nm$cand_nm,
+  levels = pcf.by_cand_nm$cand_nm[order(pcf.by_cand_nm$n)])
+
+ggplot(aes(x = cand_nm, y = n), data = pcf.by_cand_nm) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r echo=FALSE, Contributions_per_Party}
+pcf.by_cand_pt <- pcf %>% 
+  group_by(cand_pt) %>% 
+  summarise(n = n(),
+            total_amt = sum(contb_receipt_amt),
+            mean_amt = mean(contb_receipt_amt),
+            median_amt = median(contb_receipt_amt)) %>% 
+  arrange(cand_pt)
+
+ggplot(aes(x = cand_pt, y = n), data = pcf.by_cand_pt) +
+  geom_bar(stat = "identity")
+```
+
+It's interesting to see that Hillary Clinton and Bernie Sanders have more
+contributions than any other candidate, but that there are still more total
+contributions to the Republican Party than there are to the Democratic Party.
+
+How about contributions over time per candidate?
+
+```{r echo=FALSE, Contributions_Over_Time_per_Candidate}
+ggplot(aes(x = year_with_months), data = pcf) +
+  geom_freqpoly(aes(color = cand_nm))
+```
+
+Hmm... that's too many lines to be easy to read, let's just try by party.
+
+```{r echo=FALSE, Contributions_Over_Time_per_Party}
+ggplot(aes(x = year_with_months), data = pcf) +
+  geom_freqpoly(aes(color = cand_pt))
+```
+
+Next, let's look at contribution amounts.
+
+### Total Contribution Amounts
+
+```{r echo=FALSE, Contribution_Totals_per_Candidate}
+# Order the names by total_amt
+pcf.by_cand_nm$cand_nm <- factor(
+  pcf.by_cand_nm$cand_nm,
+  levels = pcf.by_cand_nm$cand_nm[order(pcf.by_cand_nm$total_amt)])
+
+ggplot(aes(x = cand_nm, y = total_amt), data = pcf.by_cand_nm) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r echo=FALSE, Contribution_Totals_per_Party}
+ggplot(aes(x = cand_pt, y = total_amt), data = pcf.by_cand_pt) +
+  geom_bar(stat = "identity")
+```
+
+Even though Bernie Sanders is clearly the leader in total number of
+contributions, he only ranks fourth by total amount of contributions!
+
+Let's use box plots to look at the distribution of contribution amounts for each
+candidate.
+
+### Contribution Amount Box Plots
+
+```{r echo=FALSE, Contribution_Amount_Box_Plots}
+ggplot(aes(x = cand_nm, y = contb_receipt_amt), data = pcf) +
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0,2650)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+It looks like Jeb Bush, Rick Santorum, and Lindsey Graham all have very large
+contribution amounts compared to everybody else. However, this may be an
+artifact due to their relatively low number of contributions. Let's take a look
+at the numbers.
+
+```{r echo=FALSE, Contribution_Numbers_by_Candidate}
+by(pcf.by_cand_nm$n, pcf.by_cand_nm$cand_nm, sum)
+```
+
+Rick Santorum only has 7 contributions, Lindsey Graham has 18, and Jeb Bush has
+187. So, the box plot *might* be a decent representation for Jeb Bush, but the
+lack of data skews the plot for the other two.
+
+Let's break this out by party.
+
+```{r echo=FALSE, Needs_More_Boxplot}
+ggplot(aes(x = cand_nm, y = contb_receipt_amt),
+             data = subset(pcf, cand_pt == 'R')) +
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0,2650)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+ggplot(aes(x = cand_nm, y = contb_receipt_amt),
+             data = subset(pcf, cand_pt == 'D')) +
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0,1100)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Interesting. The five candidates with the highest *total* contribution amounts,
+Hillary Clinton, Marco Rubio, Ted Cruz, Bernie Sanders, and Ben Carson all have
+relatively low individual contribution amounts. Let's take a closer look at
+just these five candidates. Note that the top five by total contribution amount
+is the same group as the top five by number of contributions, but in different
+order.
+
+```{r echo=FALSE, Contribution_Boxplots_for_Top_5}
+top5 <- list("Clinton, Hillary Rodham", "Rubio, Marco",
+             "Cruz, Rafael Edward 'Ted'", "Sanders, Bernard",
+             "Carson, Benjamin S.")
+ggplot(aes(x = cand_nm, y = contb_receipt_amt),
+       data = subset(pcf, cand_nm %in% top5)) +
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0,250)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+So, even though Bernie Sanders is the clear leader in total number of
+contributions, the average amount of each of those contributions is lower than
+anyone else. Conversely, Marco Rubio has much fewer contributions than anyone
+else in the top five, but he is the clear leader when it comes to average
+contribution amount among these five. It is also interesting to note that most
+of the quartiles come out to nice even numbers like $25, $50, or $100.
+
+Finally, let's look at the box plots by party.
+
+```{r echo=FALSE, Party_Berxplerts}
+ggplot(aes(x = cand_pt, y = contb_receipt_amt), data = pcf) +
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0,100))
 ```
 
 # Univariate Analysis
 
 ### What is the structure of your dataset?
+
+Blah.
 
 ### What is/are the main feature(s) of interest in your dataset?
 
@@ -166,4 +352,6 @@ on "Export Contributor Data" and then "NV.zip" (click on "File Format" for data
 description)*
 - StackOverflow - *[convert mmm to numeric in
 R](http://stackoverflow.com/questions/6549239/convert-mmm-to-numeric-in-r)* for
-converting the month variable.
+converting the month variable from string to integer
+- [How to plot factors in a specified order in
+ggplot](http://rstudio-pubs-static.s3.amazonaws.com/7433_4537ea5073dc4162950abb715f513469.html)
