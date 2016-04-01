@@ -125,7 +125,7 @@ pcf.by_cand_nm <- pcf %>%
             total_amt = sum(contb_receipt_amt),
             mean_amt = mean(contb_receipt_amt),
             median_amt = median(contb_receipt_amt)) %>% 
-  arrange(cand_nm)
+  arrange(n)
 
 # Order the names by n
 pcf.by_cand_nm$cand_nm <- factor(
@@ -144,7 +144,7 @@ pcf.by_cand_pt <- pcf %>%
             total_amt = sum(contb_receipt_amt),
             mean_amt = mean(contb_receipt_amt),
             median_amt = median(contb_receipt_amt)) %>% 
-  arrange(cand_pt)
+  arrange(n)
 
 ggplot(aes(x = cand_pt, y = n), data = pcf.by_cand_pt) +
   geom_bar(stat = "identity")
@@ -209,7 +209,8 @@ artifact due to their relatively low number of contributions. Let's take a look
 at the numbers.
 
 ```{r echo=FALSE, Contribution_Numbers_by_Candidate}
-by(pcf.by_cand_nm$n, pcf.by_cand_nm$cand_nm, sum)
+options(dplyr.print_max = 21)
+pcf.by_cand_nm
 ```
 
 Rick Santorum only has 7 contributions, Lindsey Graham has 18, and Jeb Bush has
