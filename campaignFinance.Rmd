@@ -14,6 +14,8 @@ setwd('C:/p4')
 library(ggplot2)
 library(tidyr)
 library(dplyr)
+library(maptools)
+library(zipcode)
 ```
 
 ```{r echo=FALSE, Load_the_Data}
@@ -22,6 +24,18 @@ pcf <- read.csv('2016PresidentialCampaignFinanceNV.csv')
 # Remove last (junk) column
 pcf <- subset(pcf, select = -X)
 ```
+
+# Introduction
+
+For this project, I chose to work with one of the datasets suggested by Udacity.
+The dataset is Financial Contributions to Presidential Campaigns for a single
+state. I chose the state of Nevada because that is where I live. The data comes
+directly from the Federal Election Commission's
+[website](http://fec.gov/disclosurep/pnational.do). There are 15,026
+campaign contributions in the dataset to 21 presidential
+candidates. There are 18 variables that characterize each contribution, such as
+the contribution amount and the name, employer, city, and zip code of the
+contributor.
 
 # Univariate Plots Section
 ### Summary and Initial Data Cleaning
@@ -49,25 +63,6 @@ summary(pcf$contb_receipt_amt)
 Now the minimum contribution is $1 and the mean is up to $203.50. The median and
 max contributions are unchanged.
 
-Notably missing from the data set is the political party of the candidates. So,
-I will add that data based on the
-[website](http://fec.gov/disclosurep/pnational.do) that the data is from.
-
-```{r Adding Political Parties}
-reps <- list("Bush, Jeb", "Carson, Benjamin S.", "Christie, Christopher J.",
-             "Cruz, Rafael Edward 'Ted'", "Fiorina, Carly",
-             "Graham, Lindsey O.", "Huckabee, Mike", "Jindal, Bobby",
-             "Kasich, John R.", "Pataki, George E.", "Paul, Rand",
-             "Perry, James R. (Rick)", "Rubio, Marco", "Santorum, Richard J.",
-             "Trump, Donald J.", "Walker, Scott")
-dems <- list("Clinton, Hillary Rodham", "Lessig, Lawrence",
-             "O'Malley, Martin Joseph", "Sanders, Bernard",
-             "Webb, James Henry Jr.")
-
-pcf$cand_pt <- ifelse(pcf$cand_nm %in% reps, 'R', 'D')
-pcf$cand_pt <- factor(pcf$cand_pt)
-```
-
 Currently, the contribution date variable is in a DD-MMM-YYYY string format,
 which isn't very useful for analysis, so let's split that into three separate
 numeric variables for year, month, and day.
@@ -88,6 +83,258 @@ scale.
 
 ```{r Combined Numeric Date Variable}
 pcf$year_with_months <- pcf$year + pcf$month / 12
+```
+
+Also, the city names in the dataset look like they need some cleaning:
+
+```{r echo=FALSE, Unclean_Cities}
+unique(pcf$contbr_city)
+```
+
+As you can see, there's a "Las Vegas", a "Lasvegas", a "Last Vegas", and a
+"Los Vegas"--among other errors. Time to do some clean up. Instead of manually
+changing all of the bad names to the correct names, we can use the `zipcode`
+library to look up the zipcodes in the `contbr_zip` variable.
+
+```{r echo=FALSE, A_Look_At_Zip_Codes}
+head(unique(pcf$contbr_zip), 44)
+```
+
+So, most of the zipcodes are in Zip+4 format. The zip codes in the `zipcode`
+library are only in 5-digit format, so let's convert them to 5-digit format.
+
+```{r Zip_Code_Conversion}
+pcf$contbr_zip <- substr(as.character(pcf$contbr_zip), 1, 5)
+unique(pcf$contbr_zip)
+```
+
+Looks good. Now let's get rid of the `contbr_city` and `contbr_st` variables
+and join our data frame with the `zipcode` data frame so that we have `city`,
+`state`, `latitude`, and `longitude` variables in a clean format.
+to the `zipcode` library.
+
+```{r Setting_City_and_State_Based_on_Zip}
+data(zipcode)
+names(pcf)[names(pcf) == 'contbr_zip'] <- 'zip'
+pcf <- left_join(pcf, zipcode, by = 'zip')
+# check our work
+unique(pcf$city)
+```
+
+It looks like there are some NAs, so let's see if we can fix that.
+Also, I see an "El Paso", so let's make sure that all of the cities are in
+Nevada.
+
+```{r Looking_at_City_NAs}
+subset(pcf, is.na(city) | state != "NV")$contbr_city
+subset(pcf, is.na(city) | state != "NV")$contbr_st
+subset(pcf, is.na(city) | state != "NV")$zip
+subset(pcf, is.na(city) | state != "NV")$state
+
+questionable.zips <- unique(subset(pcf, is.na(city) | state != "NV")$zip)
+subset(zipcode, zip %in% questionable.zips)
+```
+
+Okay, so a quick google search shows that the proper zip code for Incline
+Village is 89451, and that 89519 (not 59519) is a zip code in Reno.
+
+Also, Verdi (89439) and Mesquite (89024) are in NV, not CA and AZ.
+El Paso (88510) is in TX, not NV, so let's remove that entry from the data.
+
+```{r Fixing_City_NAs}
+pcf$zip[pcf$zip == "87451"] <- "89451"
+pcf$zip[pcf$zip == "59519"] <- "89519"
+pcf$state[pcf$zip %in% c("89439", "89024")] <- "NV"
+# check our work
+subset(pcf, is.na(city))$contbr_city
+subset(pcf, is.na(city))$zip
+# and fix the city, state, etc. variables for those entries
+pcf$city[pcf$zip == "89451" & is.na(pcf$city)] <-
+  zipcode$city[zipcode$zip == "89451"]
+pcf$state[pcf$zip == "89451" & is.na(pcf$state)] <-
+  zipcode$state[zipcode$zip == "89451"]
+pcf$latitude[pcf$zip == "89451" & is.na(pcf$latitude)] <-
+  zipcode$latitude[zipcode$zip == "89451"]
+pcf$longitude[pcf$zip == "89451" & is.na(pcf$longitude)] <-
+  zipcode$longitude[zipcode$zip == "89451"]
+pcf$city[pcf$zip == "89519" & is.na(pcf$city)] <-
+  zipcode$city[zipcode$zip == "89519"]
+pcf$state[pcf$zip == "89519" & is.na(pcf$state)] <-
+  zipcode$state[zipcode$zip == "89519"]
+pcf$latitude[pcf$zip == "89519" & is.na(pcf$latitude)] <-
+  zipcode$latitude[zipcode$zip == "89519"]
+pcf$longitude[pcf$zip == "89519" & is.na(pcf$longitude)] <-
+  zipcode$longitude[zipcode$zip == "89519"]
+# clean up the variables that we no longer need
+pcf <- subset(pcf, select = -contbr_city)
+pcf <- subset(pcf, select = -contbr_st)
+pcf <- subset(pcf, state != "TX")
+```
+
+Notably missing from the data set is the political party of the candidates. So,
+I will add that data based on the
+[website](http://fec.gov/disclosurep/pnational.do) that the data is from.
+
+```{r Adding Political Parties}
+reps <- list("Bush, Jeb", "Carson, Benjamin S.", "Christie, Christopher J.",
+             "Cruz, Rafael Edward 'Ted'", "Fiorina, Carly",
+             "Graham, Lindsey O.", "Huckabee, Mike", "Jindal, Bobby",
+             "Kasich, John R.", "Pataki, George E.", "Paul, Rand",
+             "Perry, James R. (Rick)", "Rubio, Marco", "Santorum, Richard J.",
+             "Trump, Donald J.", "Walker, Scott")
+dems <- list("Clinton, Hillary Rodham", "Lessig, Lawrence",
+             "O'Malley, Martin Joseph", "Sanders, Bernard",
+             "Webb, James Henry Jr.")
+
+pcf$cand_pt <- ifelse(pcf$cand_nm %in% reps, 'R', 'D')
+# ordered this way to make Republicans' plots red and Democrats' blue later on
+pcf$cand_pt <- factor(pcf$cand_pt, levels = c("R", "D"))
+```
+
+I realized that there isn't a lot of numeric data in this dataset besides the
+number of contributions and the dollar amount of those contributions, which
+would make bivariate and multivariate analysis a little bit difficult.
+So I decided to go to the [US Census Bureau
+website](http://factfinder.census.gov/faces/nav/jsf/pages/download_center.xhtml)
+to download the *2015 Population Estimates* and *Median Household Income in the
+Past 12 Months (in 2014 Inflation-Adjusted Dollars)* (from the [American
+Community Survey](https://www.census.gov/programs-surveys/acs/about.html))
+datasets for all counties within Nevada.
+
+A description of the 2015 Population Estimates dataset can be found in the
+accompanying file, *PEP_2015_PEPANNRES.txt*. The original CSV file is the file,
+*PEP_2015_PEPANNRES_with_ann.csv*. I made some modifications to the CSV file to
+make it load easier and to have variable names that made more sense to me. My
+modified version is the file, *nv_pop_by_county.csv*.
+
+A description of the Median Household Income in the Past 12 Months (in 2014
+Inflation-Adjusted Dollars) dataset from the American Community Survery can be
+found in the accompanying file, *ACS_14_5YR_B19013.txt*. The original CSV file
+is the file, *ACS_14_5YR_B19013_with_ann.csv*. I made some modifications to the
+CSV file to make it load easier and to have variable names that made more sense
+to me. My modified version is the file, *nv_household_income.csv*.
+
+```{r Adding_In_More_Data}
+np <- read.csv("nv_pop_by_county.csv")
+ni <- read.csv("nv_household_income.csv")
+```
+
+These additional datasets have information for each county in Nevada, but the
+contribution data doesn't have the county of the contribution sources listed -
+only city. So, I checked Wikipedia and found a [list of cities in
+Nevada](https://en.wikipedia.org/wiki/List_of_cities_in_Nevada) that also lists
+the county and population for each city. I wrote a Python script to scrape the
+table from the Wikipedia site to a CSV file. The Python script is the file,
+*dataScraping.py*, included with this report. The CSV file created by the script
+is the file, *nvCityCountyPop.csv*.
+
+```{r Adding_In_Even_More_Data}
+ncc <- read.csv("nvCityCountyPop.csv")
+ncc$city <- as.character(ncc$city)
+ncc$county <- as.character(ncc$county)
+```
+
+Now let's put it all together.
+
+```{r Adding_County_and_City_Population_Into_Main_Data_Frame}
+pcf <- left_join(pcf, ncc, by = 'city')
+
+# check to see if any entries have NA for the county variable
+unique(subset(pcf, is.na(county))$city)
+```
+
+It looks like there are a few cities that were left out of the Wikipedia page.
+I'll just look those up individually and enter the proper counties by hand.
+
+```{r Adding_Missing_Counties}
+pcf$county[pcf$city == "Manhattan"] <- "Nye"
+pcf$city_pop[pcf$city == "Manhattan"] <- 124
+pcf$county[pcf$city == "Silver City"] <- "Lyon"
+pcf$city_pop[pcf$city == "Silver City"] <- 170
+pcf$county[pcf$city == "Ruby Valley"] <- "Elko"
+pcf$city_pop[pcf$city == "Ruby Valley"] <- 156
+pcf$county[pcf$city == "Silverpeak"] <- "Esmeralda"
+pcf$city_pop[pcf$city == "Silverpeak"] <- 107
+pcf$county[pcf$city == "Moapa"] <- "Clark"
+pcf$city_pop[pcf$city == "Moapa"] <- 1025
+pcf$county[pcf$city == "Smith"] <- "Lyon"
+pcf$city_pop[pcf$city == "Smith"] <- 1603
+pcf$county[pcf$city == "Overton"] <- "Clark"
+pcf$city_pop[pcf$city == "Overton"] <- 3901
+pcf$county[pcf$city == "Logandale"] <- "Clark"
+pcf$city_pop[pcf$city == "Logandale"] <- 3037
+pcf$county[pcf$city == "Deeth"] <- "Elko"
+pcf$city_pop[pcf$city == "Deeth"] <- 28
+# check our work
+length(row.names(subset(pcf, is.na(county) | is.na(city_pop))))
+```
+
+Whew. Next, we will add in the census data for the counties.
+
+```{r Adding_Census_Data}
+ni$county <- as.character(ni$county)
+np$county <- as.character(np$county)
+
+pcf <- pcf %>% 
+  left_join(select(ni, county, county_income), by = "county") %>% 
+  left_join(select(np, -id1, -id2), by = "county")
+
+pcf$county <- as.factor(pcf$county)
+
+# check for NAs
+subset(pcf, is.na(county_income))
+```
+
+Let's create a new variable to look at contribution amount as a percentage of
+the median county income.
+
+```{r Contribution_Amount_as_Percent_of_Income_Variable}
+pcf$amt_per_income <- pcf$contb_receipt_amt / pcf$county_income
+```
+
+Let's look at some statistics for the added variables.
+
+```{r echo=FALSE, New_Variable_Stats}
+pcf.by_city <- pcf %>% 
+  group_by(city) %>% 
+  summarise(n = n(),
+            total_amt = sum(contb_receipt_amt),
+            mean_amt = mean(contb_receipt_amt),
+            median_amt = median(contb_receipt_amt),
+            mean_amt_per_inc = mean(amt_per_income),
+            median_amt_per_inc = median(amt_per_income),
+            county_income = median(county_income),
+            city_pop = median(city_pop)) %>% 
+  arrange(city_pop)
+
+pcf.by_county <- pcf %>% 
+  group_by(county) %>% 
+  summarise(n = n(),
+            total_amt = sum(contb_receipt_amt),
+            mean_amt = mean(contb_receipt_amt),
+            median_amt = median(contb_receipt_amt),
+            mean_amt_per_inc = mean(amt_per_income),
+            median_amt_per_inc = median(amt_per_income),
+            county_income = median(county_income),
+            median_city_pop = median(city_pop),
+            mean_city_pop = mean(city_pop),
+            jul2015county_pop_est = median(jul2015county_pop_est)) %>% 
+  arrange(jul2015county_pop_est)
+
+summary(pcf.by_county$county_income)
+summary(pcf.by_county$jul2015county_pop_est)
+summary(pcf.by_city$city_pop)
+
+subset(pcf.by_city, pcf.by_city$city_pop == 0)
+```
+
+Jean, NV is listed as having a population of zero. I thought this was an error,
+but according to [Wikipedia](https://en.wikipedia.org/wiki/Jean,_Nevada), that
+is correct!
+
+```{r echo=FALSE, Clean_Up}
+pcf$city <- as.factor(pcf$city)
+pcf$county <- as.factor(pcf$county)
 ```
 
 ### Number of Contributions
@@ -124,7 +371,10 @@ pcf.by_cand_nm <- pcf %>%
   summarise(n = n(),
             total_amt = sum(contb_receipt_amt),
             mean_amt = mean(contb_receipt_amt),
-            median_amt = median(contb_receipt_amt)) %>% 
+            median_amt = median(contb_receipt_amt),
+            mean_amt_per_inc = mean(amt_per_income),
+            median_amt_per_inc = median(amt_per_income),
+            median_inc = mean(county_income)) %>% 
   arrange(n)
 
 # Order the names by n
@@ -143,7 +393,10 @@ pcf.by_cand_pt <- pcf %>%
   summarise(n = n(),
             total_amt = sum(contb_receipt_amt),
             mean_amt = mean(contb_receipt_amt),
-            median_amt = median(contb_receipt_amt)) %>% 
+            median_amt = median(contb_receipt_amt),
+            mean_amt_per_inc = mean(amt_per_income),
+            median_amt_per_inc = median(amt_per_income),
+            median_inc = mean(county_income)) %>% 
   arrange(n)
 
 ggplot(aes(x = cand_pt, y = n), data = pcf.by_cand_pt) +
@@ -153,20 +406,6 @@ ggplot(aes(x = cand_pt, y = n), data = pcf.by_cand_pt) +
 It's interesting to see that Hillary Clinton and Bernie Sanders have more
 contributions than any other candidate, but that there are still more total
 contributions to the Republican Party than there are to the Democratic Party.
-
-How about contributions over time per candidate?
-
-```{r echo=FALSE, Contributions_Over_Time_per_Candidate}
-ggplot(aes(x = year_with_months), data = pcf) +
-  geom_freqpoly(aes(color = cand_nm))
-```
-
-Hmm... that's too many lines to be easy to read, let's just try by party.
-
-```{r echo=FALSE, Contributions_Over_Time_per_Party}
-ggplot(aes(x = year_with_months), data = pcf) +
-  geom_freqpoly(aes(color = cand_pt))
-```
 
 Next, let's look at contribution amounts.
 
@@ -211,6 +450,7 @@ at the numbers.
 ```{r echo=FALSE, Contribution_Numbers_by_Candidate}
 options(dplyr.print_max = 21)
 pcf.by_cand_nm
+options(dplyr.print_max = 10) # back to default
 ```
 
 Rick Santorum only has 7 contributions, Lindsey Graham has 18, and Jeb Bush has
@@ -266,51 +506,640 @@ ggplot(aes(x = cand_pt, y = contb_receipt_amt), data = pcf) +
   coord_cartesian(ylim = c(0,100))
 ```
 
+### Median Income of Contributors
+
+Let's look at the income of contributors. Note that in the groupings below, the
+original `county_income` variable is the *median* income for that county, so I
+used the *mean* of those medians to produce the `median_inc` variable.
+
+```{r echo=FALSE, Income_by_Party}
+ggplot(aes(x = cand_pt, y = median_inc), data = pcf.by_cand_pt) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+And let's look by candidate rather than party.
+
+```{r echo=FALSE, Income_by_Candidate}
+# Order the names by total_amt
+pcf.by_cand_nm$cand_nm <- factor(
+  pcf.by_cand_nm$cand_nm,
+  levels = pcf.by_cand_nm$cand_nm[order(pcf.by_cand_nm$median_inc)])
+
+ggplot(aes(x = cand_nm, y = median_inc), data = pcf.by_cand_nm) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Not too interesting and not surprising since the median incomes are by county
+and only vary between $31,530 and $76,560. So let's look at contributions as a
+percentage of median income.
+
+```{r echo=FALSE, Median_Amount_per_Income_by_Candidate}
+# Order the names by total_amt
+pcf.by_cand_nm$cand_nm <- factor(
+  pcf.by_cand_nm$cand_nm,
+  levels = pcf.by_cand_nm$cand_nm[order(pcf.by_cand_nm$median_amt_per_inc)])
+
+ggplot(aes(x = cand_nm, y = median_amt_per_inc), data = pcf.by_cand_nm) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+```{r echo=FALSE, Median_Amount_per_Income_by_Party}
+ggplot(aes(x = cand_pt, y = median_amt_per_inc), data = pcf.by_cand_pt) +
+  geom_bar(stat = "identity") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+This is a bit more interesting. It looks like Republican supporters may be more
+willing to spend a larger portion of their income on campaign contributions than
+Democrats. Let's look at the box plots.
+
+```{r echo=FALSE, Amt_per_Income_Candidate_Boxplots}
+ggplot(aes(x = cand_nm, y = amt_per_income), data = pcf) +
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0,0.055)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Most candidates third quartile is under 0.01, so let's zoom in to that level.
+
+```{r echo=FALSE, Amt_per_Income_Candidate_Boxplots_Zoom}
+ggplot(aes(x = cand_nm, y = amt_per_income), data = pcf) +
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0,0.01)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+And let's look by party.
+
+```{r echo=FALSE, Amt_per_Income_Party_Boxplots}
+ggplot(aes(x = cand_pt, y = amt_per_income), data = pcf) +
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0,0.0025))
+```
+
+***
+
 # Univariate Analysis
 
 ### What is the structure of your dataset?
 
-Blah.
+There are 15,026 campaign contributions in the dataset to 21 presidential
+candidates. There are 18 variables that characterize each contribution:
+
+- committee ID
+- candidate ID
+- candidate name
+- contributor name
+- contributor city
+- contributor state
+- contributor zip
+- contributor employer
+- contributor occupation
+- contribution receipt amount
+- contribution receipt date
+- receipt description
+- memo code
+- memo text
+- form type
+- file number
+- transaction ID
+- election type/primary general indicator
+
+Detailed descriptions of each of these
+variables can be found in the accompanying *dataDescription.txt* file.
+
+The 21 candidates are:
+
+- Republicans
+    - Jeb Bush
+    - Ben Carson
+    - Chris Christie
+    - Ted Cruz
+    - Carly Fiorina
+    - Lindsey Graham
+    - Mike Huckabee
+    - Bobby Jindal
+    - John Kasich
+    - George Pataki
+    - Rand Paul
+    - Rick Perry
+    - Marco Rubio
+    - Rick Santorum
+    - Donald Trump
+    - Scott Walker
+- Democrats
+    - Hillary Clinton
+    - Lawrence Lessig
+    - Martin O'Malley
+    - Bernie Sanders
+    - James Webb
+
+The data required a bit of cleanup as the minimum contribution amount was
+-$5,400. There is no mention in the
+[dataset description](ftp://ftp.fec.gov/FEC/Presidential_Map/2016/DATA_DICTIONARIES/CONTRIBUTOR_FORMAT.txt)
+of why a negative number would be included, so I removed any entries
+with a zero or negative contribution amount.
+
+Additional data was added to give more variables to work with.
+Four additional datasets were joined to the campaign finance dataset.
+
+- Zipcode data from the R zipcode library.
+- The [US Census
+Bureau's](http://factfinder.census.gov/faces/nav/jsf/pages/download_center.xhtml)
+*2015 Population Estimates*, described in *PEP_2015_PEPANNRES.txt*.
+- The [US Census
+Bureau's](http://factfinder.census.gov/faces/nav/jsf/pages/download_center.xhtml)
+*Median Household Income in the
+Past 12 Months (in 2014 Inflation-Adjusted Dollars)*, described in
+*ACS_14_5YR_B19013.txt*.
+- City and county data scraped from
+[Wikipedia](https://en.wikipedia.org/wiki/List_of_cities_in_Nevada) using the
+*dataScraping.py* script.
+
+These additional datasets added (corrected) city names, county names, median
+county incomes, and county population estimates to the data. The lowest median
+county income is $31,530, the highest is $76,560, the median is $51,090, and the
+mean is $52,480. The smallest city population is 0, the largest is 603,500, 
+the mean is 25,990, and
+the median is 1,742. The smallest 2015 county population estimate is 829, the
+largest is 2,115,000, the median is 20,610, and the mean is 180,600.
+
+##### Other Observations
+
+The mean contribution amount is $203.50, the median is $50, and the max is
+$10,800.
+
+Contributions came from donors of 1121 different occupations and 86 cities
+throughout Nevada.
+
+The top 5 candidates in order of number of contributions are:
+
+1. Bernie Sanders
+2. Hillary Clinton
+3. Ted Cruz
+4. Ben Carson
+5. Marco Rubio
+
+The top 5 candidates in order of total amount of contributions are:
+
+1. Hillary Clinton
+2. Marco Rubio
+3. Ted Cruz
+4. Bernie Sanders
+5. Ben Carson
 
 ### What is/are the main feature(s) of interest in your dataset?
 
+The main features of interest are the number of contributions, the amount of
+those contributions, who those contributions are going to, and where those
+contributions are from. I also added in population and median income data
+gathered from the US Census Bureau and scraped from Wikipedia.
+
 ### What other features in the dataset do you think will help support your investigation into your feature(s) of interest?
+
+It may be interesting to look at which occupations donated to to which political
+party, how many people made multiple contributions, and the timeline of those
+contributions.
 
 ### Did you create any new variables from existing variables in the dataset?
 
+Yes. I split the contribution receipt date variable into three variables:
+`year`, `month`, and `day`. I made a further variable called `year_with_months`
+that is a combination of year and month, with the month representing the
+a certain fraction of the year. Political parties for the candidates were also
+missing from the dataset, so I added in a variable, `cand_pt`, to record that
+based on the candidate name.
+
+With the additional data, I created one new variable called `amt_per_income`,
+which gives the contribution amount as a percentage of the median income of the
+county from which that contribution came.
+
 ### Of the features you investigated, were there any unusual distributions? Did you perform any operations on the data to tidy, adjust, or change the form of the data? If so, why did you do this?
 
+Although histograms such as number and amount of contributions came out
+decidedly skewed, I did not feel it was appropriate to try to transform the
+data (by converting to a logarithmic scale, for example) because the skewed
+(untransformed) version of the data speaks for itself.
 
+***
 
 # Bivariate Plots Section
-```{r echo=FALSE, Bivariate_Plots}
 
+Let's start with a scatter plot of contribution amounts vs. median income.
+
+```{r echo=FALSE, Contribution_Amount_vs_Median_Income}
+ggplot(aes(x = contb_receipt_amt, y = county_income), data = pcf) +
+  geom_jitter(alpha = 1/10) +
+  coord_trans(x = "log10") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+cor.test(pcf$contb_receipt_amt, pcf$county_income)
 ```
+
+There isn't much correlation between income and contribution amount. Let's see
+if counties with a larger population are more likely to have more contributions.
+
+```{r echo=FALSE, Number_Contributions_vs_Population}
+ggplot(aes(x = jul2015county_pop_est, y = n), data = pcf.by_county) +
+  geom_line() +
+  coord_trans(x = "log10") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+cor.test(pcf.by_county$n, pcf.by_county$jul2015county_pop_est)
+```
+
+Not surprisingly, there is a high correlation between county population and the
+number of contributions made. Let's also look at total amount of
+contributions vs population.
+
+```{r echo=FALSE, Total_Contribution_Amount_vs_Population}
+ggplot(aes(x = jul2015county_pop_est, y = total_amt), data = pcf.by_county) +
+  geom_line() +
+  coord_trans(x = "log10") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+cor.test(pcf.by_county$n, pcf.by_county$jul2015county_pop_est)
+```
+
+It looks about the same. Let's try breaking it out by party.
+
+```{r echo=FALSE, Number_Contributions_vs_Population_by_Party}
+pcf.by_county_party <- pcf %>% 
+  group_by(county, cand_pt) %>% 
+  summarise(n = n(),
+            total_amt = sum(contb_receipt_amt),
+            mean_amt = mean(contb_receipt_amt),
+            median_amt = median(contb_receipt_amt),
+            mean_amt_per_inc = mean(amt_per_income),
+            median_amt_per_inc = median(amt_per_income),
+            county_income = median(county_income),
+            median_city_pop = median(city_pop),
+            mean_city_pop = mean(city_pop),
+            jul2015county_pop_est = median(jul2015county_pop_est)) %>% 
+  ungroup() %>% 
+  arrange(jul2015county_pop_est)
+  
+ggplot(aes(x = jul2015county_pop_est, y = n), data = pcf.by_county_party) +
+  geom_line(aes(color = cand_pt)) +
+  coord_trans(x = "log10") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
+
+Hmm... It looks like in places with smaller populations, more money is going to
+the Republicans, while in places with larger populations, the Democrats take the
+lead. This seems to fit with the political maps of the united states that I've
+seen.
+
+How about contributions over time per candidate?
+
+```{r echo=FALSE, Contributions_Over_Time_per_Candidate}
+ggplot(aes(x = year_with_months), data = pcf) +
+  geom_freqpoly(aes(color = cand_nm))
+```
+
+Hmm... that's too many lines to be easy to read, let's just try by party.
+
+```{r echo=FALSE, Contributions_Over_Time_per_Party}
+ggplot(aes(x = year_with_months), data = pcf) +
+  geom_freqpoly(aes(color = cand_pt))
+```
+
+And let's fit a smoothed lines to the data for the overall trend for both
+parties.
+
+```{r echo=FALSE, Contributions_Over_Time_per_Party_Smoothed}
+ggplot(aes(x = year_with_months), data = pcf) +
+  geom_freqpoly(aes(color = cand_pt)) +
+  geom_smooth(stat = "count")
+```
+
+***
 
 # Bivariate Analysis
 
 ### Talk about some of the relationships you observed in this part of the investigation. How did the feature(s) of interest vary with other features in the dataset?
 
+Population
+was highly correlated with both number and total amount of contributions.
+Looking closer, it was interesting to see that there were more contributions to
+Democrats in places with higher populations, and more contributions to
+Republicans in places with lower populations.
+
+Also, the number of contributions (for both parties) has steadily increased with
+time, but this is not surprising as the elections are coming up later this year.
+
 ### Did you observe any interesting relationships between the other features (not the main feature(s) of interest)?
+
+It was interesting to see that there was very *low* correlation between 
+contribution amount and median income. I would have thought that people who make
+more money would be making larger contributions, but for the most part, it seems
+that contribution amounts are independent of income and tend to gravitate toward
+nice round numbers like $25, $50, or $100, which I'm guessing are suggested
+donation amounts on donation forms or candidate websites.
 
 ### What was the strongest relationship you found?
 
+The strongest relationship, with a correlation of .98, was between the number of
+contributions and the population of where those contributions came from. This is
+not surprising, but it at least shows that there aren't unexpected relationships
+like certain low-population areas having a disproportionately high number of
+contributions.
 
-
+***
 
 # Multivariate Plots Section
 
-```{r echo=FALSE, Multivariate_Plots}
+Let's try looking at what party people with certain occupations made
+contributions toward.
 
+```{r echo=FALSE, Contributions_By_Occupation}
+pcf.by_occupation_party <- pcf %>% 
+  group_by(contbr_occupation, cand_pt) %>% 
+  summarise(n = n(),
+            total_amt = sum(contb_receipt_amt),
+            mean_amt = mean(contb_receipt_amt),
+            median_amt = median(contb_receipt_amt)) %>% 
+  ungroup() %>% 
+  arrange(-n)
+
+pcf.by_occupation <- pcf %>% 
+  group_by(contbr_occupation) %>% 
+  summarise(n = n(),
+            total_amt = sum(contb_receipt_amt),
+            mean_amt = mean(contb_receipt_amt),
+            median_amt = median(contb_receipt_amt)) %>% 
+  arrange(-n)
+
+options(dplyr.print_max = 30)
+head(pcf.by_occupation, 30)
+options(dplyr.print_max = 10)
 ```
+
+It looks like there are some occupations that need to be grouped together. For
+example, "NOT EMPLOYED" and "NONE" should be grouped, "LAWYER" and "ATTORNEY"
+should be grouped, etc. There are also a lot of unknowns as seen with the
+"INFORMATION REQUESTED PER BEST EFFORTS" category. So let's do some cleanup.
+
+```{r echo=FALSE, Cleaning_Up_Occupations}
+remove_these <- c("INFORMATION REQUESTED PER BEST EFFORTS",
+                  "INFORMATION REQUESTED",
+                  "")
+nurses <- c("RN", "NURSE", "REGISTERED NURSE", "R.N.")
+doctors <- c("PHYSICIAN", "DOCTOR")
+lawyers <- c("ATTORNEY", "LAWYER")
+bosses <- c("CEO", "PRESIDENT", "OWNER", "BUSINESS OWNER", "EXECUTIVE",
+            "SMALL BUSINESS OWNER")
+managers <- c("MANAGEMENT", "MANAGER", "PROJECT MANAGER")
+sales <- c("SALES", "SALES COORDINATOR")
+unemployed <- c("NOT EMPLOYED", "NONE", "UNEMPLOYED")
+selfs <- c("SELF EMPLOYED", "SELF-EMPLOYED", "REAL ESTATE BROKER",
+           "REAL ESTATE AGENT")
+real_estates <- c("REAL ESTATE", "REALTOR")
+
+pcf$contbr_occupation[
+  pcf$contbr_occupation %in% nurses] <- "NURSE"
+pcf$contbr_occupation[
+  pcf$contbr_occupation %in% doctors] <- "DOCTOR"
+pcf$contbr_occupation[
+  pcf$contbr_occupation %in% lawyers] <- "LAWYER"
+pcf$contbr_occupation[
+  pcf$contbr_occupation %in% bosses] <- "CEO"
+pcf$contbr_occupation[
+  pcf$contbr_occupation %in% managers] <- "MANAGER"
+pcf$contbr_occupation[
+  pcf$contbr_occupation %in% sales] <- "SALES"
+pcf$contbr_occupation[
+  pcf$contbr_occupation %in% unemployed] <- "UNEMPLOYED"
+pcf$contbr_occupation[
+  pcf$contbr_occupation %in% selfs] <- "SELF EMPLOYED"
+pcf$contbr_occupation[
+  pcf$contbr_occupation %in% real_estates] <- "REAL ESTATE"
+
+pcf.by_occupation_party <- pcf %>% 
+  group_by(contbr_occupation, cand_pt) %>% 
+  summarise(n = n(),
+            total_amt = sum(contb_receipt_amt),
+            mean_amt = mean(contb_receipt_amt),
+            median_amt = median(contb_receipt_amt)) %>% 
+  ungroup() %>% 
+  arrange(-n)
+
+pcf.by_occupation <- pcf %>% 
+  group_by(contbr_occupation) %>% 
+  summarise(n = n(),
+            total_amt = sum(contb_receipt_amt),
+            mean_amt = mean(contb_receipt_amt),
+            median_amt = median(contb_receipt_amt)) %>% 
+  arrange(-n)
+
+pcf.by_occupation_party <- subset(pcf.by_occupation_party,
+                                  !(contbr_occupation %in% remove_these))
+pcf.by_occupation <- subset(pcf.by_occupation,
+                                  !(contbr_occupation %in% remove_these))
+
+options(dplyr.print_max = 30)
+head(pcf.by_occupation, 30)
+options(dplyr.print_max = 10)
+```
+
+There is still more clean up that could be done, but we cleaned up the top 30.
+Now, to make things more palatable, we will only look at occupations that have
+made 75 or more contributions.
+
+```{r echo=FALSE, More_Occupation_Clean_Up_and_Plots}
+pcf.by_occupation <- subset(pcf.by_occupation, n >= 75)
+pcf.by_occupation_party <- subset(
+  pcf.by_occupation_party,
+  contbr_occupation %in% pcf.by_occupation$contbr_occupation)
+
+ggplot(aes(x = cand_pt, y = n, fill = cand_pt), data = pcf.by_occupation_party) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~contbr_occupation, scales = "free")
+```
+
+It looks like some occupations, such as professors and writers, are much more
+likely to contribute to Democrats, while other occupations, such as homemakers
+and retirees, are much more likely to contribute to Republicans. Others, such as
+doctors and people in real estate, seem to have a pretty even split.
+
+***
+
+Finally, I wanted to look at some statistics geographically on a map of Nevada.
+To do this, I borrowed some code from [Eduardo
+Leoni](http://stackoverflow.com/questions/1260965/developing-geographic-thematic-maps-with-r)
+and modified it for this data set.
+
+```{r echo=FALSE, heatmap_function}
+# This function was written by Eduardo Leoni
+# http://stackoverflow.com/questions/1260965/developing-geographic-thematic-maps-with-r
+plot.heat <- function(counties.map, state.map, z, title = NULL, breaks = NULL,
+                      reverse = FALSE, cex.legend = 1, bw = .2, redblue = FALSE,
+                      plot.legend = TRUE, labels = NULL) {
+  ##Break down the value variable
+  if (is.null(breaks)) {
+    breaks=
+      seq(
+          floor(min(counties.map@data[, z], na.rm = TRUE) * 10) / 10
+          ,
+          ceiling(max(counties.map@data[, z], na.rm = TRUE) * 10) / 10
+          , .1)
+  }
+  if (!(is.null(labels))) {
+    counties.map@data$zCat <- cut(counties.map@data[, z], breaks,
+                                  labels = labels, include.lowest = TRUE)
+  } else {
+    counties.map@data$zCat <- cut(counties.map@data[, z], breaks, 
+                                  include.lowest = TRUE)
+  }
+  cutpoints <- levels(counties.map@data$zCat)
+  if (redblue) col.vec <- rainbow(
+    length(levels(counties.map@data$zCat)), start = 4/6, end = 0)
+  else col.vec <- heat.colors(
+    length(levels(counties.map@data$zCat)))
+  if (reverse) {
+    cutpointsColors <- rev(col.vec)
+  } else {
+    cutpointsColors <- col.vec
+  }
+  levels(counties.map@data$zCat) <- cutpointsColors
+  plot(counties.map, border = gray(.8), lwd = bw, axes = FALSE, las = 1,
+       col = as.character(counties.map@data$zCat))
+  if (!is.null(state.map)) {
+    plot(state.map, add = TRUE, lwd=1)
+  }
+  ##with(counties.map.c,text(x,y,name,cex=0.75))
+  if (plot.legend) legend("bottomleft", cutpoints, fill = cutpointsColors,
+                          bty = "n", title = title, cex = cex.legend)
+  ##title("Cartogram")
+}
+```
+
+First we'll just look at a basic heat map of income by county.
+
+```{r echo=FALSE, NV_Map_Income}
+nv.map <- readShapeSpatial("nv.shp")
+county.map <- readShapeSpatial("nv_counties.shp")
+
+names(county.map@data)[names(county.map@data) == "NAME10"] <- "county"
+county.map@data <- county.map@data %>% 
+  left_join(ni)
+## plot colors
+plot.heat(county.map, nv.map, z = "county_income",
+          breaks = c(3e4, 4e4, 5e4, 6e4, 7e4, 8e4),
+          labels = c('$30k - $40k', '$40k - $50k', '$50k - $60k',
+                     '$60k - $70k', '$70k - $80k'),
+          reverse = TRUE,
+          title = 'Median Income')
+```
+
+And let's do the same for population.
+
+```{r echo=FALSE, NV_Map_Population}
+county.map@data <- county.map@data %>% 
+  left_join(np)
+## plot colors
+plot.heat(county.map, nv.map, z = "jul2015county_pop_est",
+          breaks = c(0, 1e3, 5e3, 5e4, 15e4, 5e5, 25e5),
+          labels = c('0 - 1,000', '1,000 - 5,000', '5,000 - 50,000',
+                     '50,000 - 150,000', '150,000 - 500,000',
+                     '500,000 - 2,500,000'),
+          reverse = TRUE,
+          title = 'Population')
+```
+
+Next, let's make a few new variables that show the ratio of Democrat to
+Republican.
+
+```{r Ratio_Variables}
+pcf.by_county_amt_ratio <- spread(
+  select(pcf.by_county_party, county, cand_pt, total_amt),
+  cand_pt,
+  total_amt,
+  fill = 0)
+
+pcf.by_county_amt_ratio$amt_percent_R <-
+  pcf.by_county_amt_ratio$R / (pcf.by_county_amt_ratio$R + pcf.by_county_amt_ratio$D)
+pcf.by_county_amt_ratio$amt_percent_D <-
+  pcf.by_county_amt_ratio$D / (pcf.by_county_amt_ratio$R + pcf.by_county_amt_ratio$D)
+
+pcf.by_county_n_ratio <- spread(
+  select(pcf.by_county_party, county, cand_pt, n),
+  cand_pt,
+  n,
+  fill = 0)
+
+pcf.by_county_n_ratio$n_percent_R <-
+  pcf.by_county_n_ratio$R / (pcf.by_county_n_ratio$R + pcf.by_county_n_ratio$D)
+pcf.by_county_n_ratio$n_percent_D <-
+  pcf.by_county_n_ratio$D / (pcf.by_county_n_ratio$R + pcf.by_county_n_ratio$D)
+```
+
+Finally, let's plot the ratios on the map. First, we will plot the color of each
+county based on the percentage of the total contribution amount that is
+Republican or Democrat. 100% Democrat will be blue, 100% Republican will be red,
+and everything in between will be a mix of blue and red.
+
+(Note that there were no contributions from Eureka county, so it will be
+uncolored in the following plots.)
+
+```{r echo=FALSE, NV_Map_Contribution_Amount_Ratio}
+county.map@data <- county.map@data %>% 
+  left_join(pcf.by_county_amt_ratio)
+## plot colors
+plot.heat(county.map, nv.map, z = "amt_percent_R",
+          breaks = seq(0,1,0.25),
+          labels = c('75% - 100% Democrat', 'Mostly Democrat',
+                     'Mostly Republican', '75% - 100% Republican'),
+          title = 'Contribution Amount',
+          redblue = TRUE)
+```
+
+Next, let's do the same for the total number of contributions.
+
+```{r echo=FALSE, NV_Map_Contribution_Number_Ratio}
+county.map@data <- county.map@data %>% 
+  left_join(select(pcf.by_county_n_ratio, county, n_percent_D, n_percent_R))
+## plot colors
+plot.heat(county.map, nv.map, z = "n_percent_R",
+          breaks = seq(0,1,0.25),
+          labels = c('75% - 100% Democrat', 'Mostly Democrat',
+                     'Mostly Republican', '75% - 100% Republican'),
+          title = 'Number of Contributions',
+          redblue = TRUE)
+```
+
+As we saw in the univariate analysis section, Republicans have a big lead in
+total amount of contributions, but when it comes to total *number* of
+contributions, the map gets a lot more blue.
 
 # Multivariate Analysis
 
 ### Talk about some of the relationships you observed in this part of the investigation. Were there features that strengthened each other in terms of looking at your feature(s) of interest?
 
+It was interesting to see what proportions of different occupations made
+contributions to which party. Some occupations overwhelmingly contributed to one
+party, while others overwhelmingly contributed to the other--and some seemed to
+have an even split.
+
+It was also interesting to see the differences between contribution amount and
+number of contributions on the map--especially when comparing those mappings to
+the population heat map. Places with higher populations tended to have more
+blue (contributions to Democrats), and places with lower populations tended to
+have more red (contributions to Republicans).
+
 ### Were there any interesting or surprising interactions between features?
 
-### OPTIONAL: Did you create any models with your dataset? Discuss the strengths and limitations of your model.
+I think the most interesting thing that popped out was the difference between
+total amount of contributions and total number of contributions. You would think
+that they would be pretty highly correlated, but it looks like people who
+contribute to Republican candidates are more likely to give a bigger
+contribution than those who contribute to Democratic candidates. I'm sure that
+many political scientists and economists would have a lot to say about why this
+is, but I am not going to try to guess at these reasons and will leave such
+conclusions to the reader.
 
 ------
 
@@ -318,41 +1147,137 @@ Blah.
 
 ### Plot One
 ```{r echo=FALSE, Plot_One}
-
+names(pcf)[names(pcf) == "cand_pt"] <- "Party"
+pcf$Party <- ordered(pcf$Party,
+                     levels = c("R", "D"),
+                     labels = c("Republican", "Democrat"))
+ggplot(aes(x = cand_nm, y = contb_receipt_amt, fill = Party),
+       data = subset(pcf, cand_nm %in% top5)) +
+  geom_boxplot() +
+  coord_cartesian(ylim = c(0,250)) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylab('Contribution Amount ($)') +
+  xlab('Candidate Name') +
+  ggtitle('Individual Contribution Amounts for the Top 5 Candidates')
 ```
 
 ### Description One
-
+These box plots show the quartiles of how much individual contributions amounted
+to for the top 5 candidates in the data. As you can see, Marco Rubio tends to
+get much more per contribution than the other candidates here and Bernie Sanders
+tends to get less per contribution. Interestingly, of these 5, Marco Rubio has
+the *fewest* contributions, and Bernie Sanders has the *most*.
 
 ### Plot Two
 ```{r echo=FALSE, Plot_Two}
-
+names(pcf.by_county_party)[names(pcf.by_county_party) == "cand_pt"] <- "Party"
+pcf.by_county_party$Party <- ordered(pcf.by_county_party$Party,
+                                     levels = c("R", "D"),
+                                     labels = c("Republican", "Democrat"))
+ggplot(aes(x = jul2015county_pop_est, y = n), data = pcf.by_county_party) +
+  geom_line(aes(color = Party), size = 1) +
+  coord_trans(x = "log10") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylab('Number of Contributions') +
+  xlab('County Population') +
+  ggtitle('Number of Contributions vs Population for Each Party')
 ```
 
 ### Description Two
-
+This plot shows the number of contributions vs population. Although it is not
+surprising that the number of contributions increases with population, the
+interesting thing is the cross-over in the plots--there is a larger proportion
+of contributions that go to Republican Party candidates when population is
+small, but at about a population of 200,000, the trend switches and people are
+more likely to contribute to Democratic Party candidates.
 
 ### Plot Three
 ```{r echo=FALSE, Plot_Three}
-
+names(pcf.by_occupation_party)[
+  names(pcf.by_occupation_party) == "cand_pt"] <- "Party"
+ggplot(aes(x = Party, y = n, fill = Party), data = pcf.by_occupation_party) +
+  geom_bar(stat = "identity") +
+  facet_wrap(~contbr_occupation, scales = "free") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  ylab('Number of Contributions') +
+  xlab('Political Party') +
+  ggtitle('Number of Contributions to Each Party by Occupation')
 ```
 
 ### Description Three
+This is a plot of number of contributions to each party based on contributor
+occupation. It is interesting to see that some occupations overwhelmingly lean
+toward one party or another, while others have a relatively even split. This
+only represents data for known occupations with at least 75 contributions. There
+were over 1000 different occupations in the dataset overall, so it would have
+been impractical to try to plot them all.
 
 ------
 
 # Reflection
+I started off the analysis by looking at contribution amounts and numbers, and
+as soon as I got to the bivariate section, I felt mostly at a loss, so I
+decided to add more data. This took several iterations and a lot of testing and
+data wrangling before I got the data that I wanted in the form that I wanted. In
+fact, I think I probably spent much more time on this part of the project than
+on the actual data analysis. I suppose this is in line with [the work that most
+data scientists
+do](http://www.nytimes.com/2014/08/18/technology/for-big-data-scientists-hurdle-to-insights-is-janitor-work.html?_r=0),
+though.
+
+There were also certain areas that were much less interesting than I thought
+they would be. Contributions over time, for example, didn't really show anything
+other than what you would expect: as the election gets closer, contributions
+increase. With contribution amount vs median income, I was expecting a strong
+correlation, but instead saw a very weak correlation. But, I suppose that it is
+just as important (if not more so) to find out which of your assumptions were
+wrong as it is to find and confirm the ones that were correct.
+
+The plot that had the biggest impact on my own view was the second plot in the
+final plots section. I made the plot just as a way to view contributions vs
+population for each party, but I wasn't expecting to see anything interesting at
+all. Instead, I saw where the lines crossed over each other, showing that
+places with higher populations tended to contribute one way, while places with
+lower populations tended to contribute the other way. I think that this sort of
+unexpected realization is at the core of why exploratory data analysis is
+important--sometimes the most meaningful relationships come out where you least
+expect them to.
+
+Overall, I felt that I learned a lot in the Exploratory Data Analysis course and
+this project. I learned that sometimes doing something that seems like it should
+be quick and simple (like adding more data to what you already have) can end up
+being the most laborious step in the whole process. Most importantly, I also
+learned that data
+exploration is very helpful in testing your assumptions and helping you to see
+connections that you wouldn't even have thought to look for.
 
 ------
 
 # Sources
 
-- Dataset from the
+- Main dataset from the
 [Federal Election Commission](http://fec.gov/disclosurep/pnational.do) - *Click
 on "Export Contributor Data" and then "NV.zip" (click on "File Format" for data
 description)*
-- StackOverflow - *[convert mmm to numeric in
-R](http://stackoverflow.com/questions/6549239/convert-mmm-to-numeric-in-r)* for
-converting the month variable from string to integer
+- Additional data taken from the [US Census Bureau
+website](http://factfinder.census.gov/faces/nav/jsf/pages/download_center.xhtml)
+- Information on how to convert the month MMM string variable to an integer:
+StackOverflow - *[convert mmm to numeric in
+R](http://stackoverflow.com/questions/6549239/convert-mmm-to-numeric-in-r)*
 - [How to plot factors in a specified order in
 ggplot](http://rstudio-pubs-static.s3.amazonaws.com/7433_4537ea5073dc4162950abb715f513469.html)
+- Shapefiles for maps from the
+[US Census Bureau](http://www.census.gov/cgi-bin/geo/shapefiles2010/main)
+website.
+- Instructions for how to use the shapefiles: StackOverflow - *[Plotting color
+map with zip codes in R or Python](http://stackoverflow.com/questions/1441717/plotting-color-map-with-zip-codes-in-r-or-python)*
+- And the heatmap function by
+[Eduardo Leoni](http://stackoverflow.com/users/143377/eduardo-leoni) to go with
+the shapefiles: StackOverflow - *[Developing Geographi Thematic Maps with
+R](http://stackoverflow.com/questions/1260965/developing-geographic-thematic-maps-with-r)*
+- [Renaming columns in a data frame](http://www.cookbook-r.com/Manipulating_data/Renaming_columns_in_a_data_frame/)
+- For Python script to parse Wikipedia table: StackOverflow -
+*[python BeautifulSoup parsing
+table](http://stackoverflow.com/questions/23377533/python-beautifulsoup-parsing-table)*
+- Table used to get county names for cities in Nevada: Wikipedia - *[List of
+cities in Nevada](https://en.wikipedia.org/wiki/List_of_cities_in_Nevada)*

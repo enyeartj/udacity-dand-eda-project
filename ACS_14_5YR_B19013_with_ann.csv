@@ -1,0 +1,19 @@
+GEO.id,GEO.id2,GEO.display-label,HD01_VD01,HD02_VD01
+Id,Id2,Geography,Estimate; Median household income in the past 12 months (in 2014 Inflation-adjusted dollars),Margin of Error; Median household income in the past 12 months (in 2014 Inflation-adjusted dollars)
+0500000US32001,32001,"Churchill County, Nevada",46195,2321
+0500000US32003,32003,"Clark County, Nevada",52070,360
+0500000US32005,32005,"Douglas County, Nevada",58940,2459
+0500000US32007,32007,"Elko County, Nevada",72280,2898
+0500000US32009,32009,"Esmeralda County, Nevada",31528,9798
+0500000US32011,32011,"Eureka County, Nevada",68403,24387
+0500000US32013,32013,"Humboldt County, Nevada",62632,6433
+0500000US32015,32015,"Lander County, Nevada",76558,8882
+0500000US32017,32017,"Lincoln County, Nevada",40550,5988
+0500000US32019,32019,"Lyon County, Nevada",47143,1878
+0500000US32021,32021,"Mineral County, Nevada",38664,4916
+0500000US32023,32023,"Nye County, Nevada",41757,2105
+0500000US32027,32027,"Pershing County, Nevada",48165,6008
+0500000US32029,32029,"Storey County, Nevada",64835,8224
+0500000US32031,32031,"Washoe County, Nevada",52910,875
+0500000US32033,32033,"White Pine County, Nevada",55337,5184
+0500000US32510,32510,"Carson City, Nevada",50108,2629
