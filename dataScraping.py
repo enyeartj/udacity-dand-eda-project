@@ -2,7 +2,7 @@
 """
 Created on Sun Apr 03 09:20:24 2016
 
-@author: warg
+@author: John Enyeart
 """
 
 import csv
