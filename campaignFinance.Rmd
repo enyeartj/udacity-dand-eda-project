@@ -111,7 +111,6 @@ unique(pcf$contbr_zip)
 Looks good. Now let's get rid of the `contbr_city` and `contbr_st` variables
 and join our data frame with the `zipcode` data frame so that we have `city`,
 `state`, `latitude`, and `longitude` variables in a clean format.
-to the `zipcode` library.
 
 ```{r Setting_City_and_State_Based_on_Zip}
 data(zipcode)
@@ -320,9 +319,20 @@ pcf.by_county <- pcf %>%
             mean_city_pop = mean(city_pop),
             jul2015county_pop_est = median(jul2015county_pop_est)) %>% 
   arrange(jul2015county_pop_est)
+```
 
+County Income:
+```{r echo=FALSE, County_Income}
 summary(pcf.by_county$county_income)
+```
+
+July 2015 County Population Estimates:
+```{r echo=FALSE, County_Population}
 summary(pcf.by_county$jul2015county_pop_est)
+```
+
+And City Populations (from Wikipedia):
+```{r echo=FALSE, City_Population}
 summary(pcf.by_city$city_pop)
 
 subset(pcf.by_city, pcf.by_city$city_pop == 0)
@@ -459,13 +469,17 @@ lack of data skews the plot for the other two.
 
 Let's break this out by party.
 
-```{r echo=FALSE, Needs_More_Boxplot}
+Republicans:
+```{r echo=FALSE, Needs_More_Boxplot_R}
 ggplot(aes(x = cand_nm, y = contb_receipt_amt),
              data = subset(pcf, cand_pt == 'R')) +
   geom_boxplot() +
   coord_cartesian(ylim = c(0,2650)) +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+```
 
+Democrats:
+```{r echo=FALSE, Needs_More_Boxplot_D}
 ggplot(aes(x = cand_nm, y = contb_receipt_amt),
              data = subset(pcf, cand_pt == 'D')) +
   geom_boxplot() +
@@ -1134,7 +1148,7 @@ have more red (contributions to Republicans).
 
 I think the most interesting thing that popped out was the difference between
 total amount of contributions and total number of contributions. You would think
-that they would be pretty highly correlated, but it looks like people who
+that it would be independent of political party, but it looks like people who
 contribute to Republican candidates are more likely to give a bigger
 contribution than those who contribute to Democratic candidates. I'm sure that
 many political scientists and economists would have a lot to say about why this
