@@ -18,6 +18,12 @@ library(maptools)
 library(zipcode)
 ```
 
+```{r global_options, include=FALSE}
+# Note: not setting echo=FALSE because there is *some* code I want to show
+knitr::opts_chunk$set(fig.width=12, fig.height=8, fig.path='Figs/',
+                      warning=FALSE, message=FALSE)
+```
+
 ```{r echo=FALSE, Load_the_Data}
 # Load the Data
 pcf <- read.csv('2016PresidentialCampaignFinanceNV.csv')
@@ -395,7 +401,22 @@ pcf.by_cand_nm$cand_nm <- factor(
 ggplot(aes(x = cand_nm, y = n), data = pcf.by_cand_nm) +
   geom_bar(stat = "identity") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+# Overall Stats:
+summary(pcf.by_cand_nm)
+subset(pcf.by_cand_nm, n == 1)
+subset(pcf.by_cand_nm, total_amt == min(pcf.by_cand_nm$total_amt))
+subset(pcf.by_cand_nm, total_amt == max(pcf.by_cand_nm$total_amt))
 ```
+
+We can see that the median number of contributions for a candidate is 53. There
+are two candidates tied for the minimum number of contributions: 1, and Bernie
+Sanders has the most contributions with 4,262.
+
+As far as dollar amount, the two candidates with the lowest total amount had
+only $250 (and were also the same two candidates with only one contribution),
+the median was $27,075, and the max amount was $832,643, which went to
+Hillary Clinton.
 
 ```{r echo=FALSE, Contributions_per_Party}
 pcf.by_cand_pt <- pcf %>% 
@@ -411,13 +432,155 @@ pcf.by_cand_pt <- pcf %>%
 
 ggplot(aes(x = cand_pt, y = n), data = pcf.by_cand_pt) +
   geom_bar(stat = "identity")
+
+pcf.by_cand_pt
 ```
 
 It's interesting to see that Hillary Clinton and Bernie Sanders have more
 contributions than any other candidate, but that there are still more total
 contributions to the Republican Party than there are to the Democratic Party.
 
-Next, let's look at contribution amounts.
+Some statistics:
+
+The Democratic Party had 7,259 contributions for a total dollar amount of
+$1,184,627 with a median contribution amount of $35.
+
+The Republican Party had 7,766 contributions for a total dollar amount of
+$1,873,199 with a median contribution amount of $50.
+
+***
+
+# Univariate Analysis
+
+### What is the structure of your dataset?
+
+There are 15,026 campaign contributions in the dataset to 21 presidential
+candidates. There are 18 variables that characterize each contribution:
+
+- committee ID
+- candidate ID
+- candidate name
+- contributor name
+- contributor city
+- contributor state
+- contributor zip
+- contributor employer
+- contributor occupation
+- contribution receipt amount
+- contribution receipt date
+- receipt description
+- memo code
+- memo text
+- form type
+- file number
+- transaction ID
+- election type/primary general indicator
+
+Detailed descriptions of each of these
+variables can be found in the accompanying *dataDescription.txt* file.
+
+The 21 candidates are:
+
+- Republicans
+    - Jeb Bush
+    - Ben Carson
+    - Chris Christie
+    - Ted Cruz
+    - Carly Fiorina
+    - Lindsey Graham
+    - Mike Huckabee
+    - Bobby Jindal
+    - John Kasich
+    - George Pataki
+    - Rand Paul
+    - Rick Perry
+    - Marco Rubio
+    - Rick Santorum
+    - Donald Trump
+    - Scott Walker
+- Democrats
+    - Hillary Clinton
+    - Lawrence Lessig
+    - Martin O'Malley
+    - Bernie Sanders
+    - James Webb
+
+The data required a bit of cleanup as the minimum contribution amount was
+-$5,400. There is no mention in the
+[dataset description](ftp://ftp.fec.gov/FEC/Presidential_Map/2016/DATA_DICTIONARIES/CONTRIBUTOR_FORMAT.txt)
+of why a negative number would be included, so I removed any entries
+with a zero or negative contribution amount.
+
+Additional data was added to give more variables to work with.
+Four additional datasets were joined to the campaign finance dataset.
+
+- Zipcode data from the R zipcode library.
+- The [US Census
+Bureau's](http://factfinder.census.gov/faces/nav/jsf/pages/download_center.xhtml)
+*2015 Population Estimates*, described in *PEP_2015_PEPANNRES.txt*.
+- The [US Census
+Bureau's](http://factfinder.census.gov/faces/nav/jsf/pages/download_center.xhtml)
+*Median Household Income in the
+Past 12 Months (in 2014 Inflation-Adjusted Dollars)*, described in
+*ACS_14_5YR_B19013.txt*.
+- City and county data scraped from
+[Wikipedia](https://en.wikipedia.org/wiki/List_of_cities_in_Nevada) using the
+*dataScraping.py* script.
+
+These additional datasets added (corrected) city names, county names, median
+county incomes, and county population estimates to the data. The lowest median
+county income is $31,530, the highest is $76,560, the median is $51,090, and the
+mean is $52,480. The smallest city population is 0, the largest is 603,500, 
+the mean is 25,990, and
+the median is 1,742. The smallest 2015 county population estimate is 829, the
+largest is 2,115,000, the median is 20,610, and the mean is 180,600.
+
+##### Other Observations
+
+The mean contribution amount is $203.50, the median is $50, and the max is
+$10,800.
+
+Contributions came from donors of 1121 different occupations and 86 cities
+throughout Nevada.
+
+### What is/are the main feature(s) of interest in your dataset?
+
+The main features of interest are the number of contributions, the amount of
+those contributions, who those contributions are going to, and where those
+contributions are from. I also added in population and median income data
+gathered from the US Census Bureau and scraped from Wikipedia.
+
+### What other features in the dataset do you think will help support your investigation into your feature(s) of interest?
+
+It may be interesting to look at which occupations donated to to which political
+party, how many people made multiple contributions, and the timeline of those
+contributions.
+
+### Did you create any new variables from existing variables in the dataset?
+
+Yes. I split the contribution receipt date variable into three variables:
+`year`, `month`, and `day`. I made a further variable called `year_with_months`
+that is a combination of year and month, with the month representing the
+a certain fraction of the year. Political parties for the candidates were also
+missing from the dataset, so I added in a variable, `cand_pt`, to record that
+based on the candidate name.
+
+With the additional data, I created one new variable called `amt_per_income`,
+which gives the contribution amount as a percentage of the median income of the
+county from which that contribution came.
+
+### Of the features you investigated, were there any unusual distributions? Did you perform any operations on the data to tidy, adjust, or change the form of the data? If so, why did you do this?
+
+Although histograms such as number and amount of contributions came out
+decidedly skewed, I did not feel it was appropriate to try to transform the
+data (by converting to a logarithmic scale, for example) because the skewed
+(untransformed) version of the data speaks for itself.
+
+***
+
+# Bivariate Plots Section
+
+Let's start off with a look at contribution amounts.
 
 ### Total Contribution Amounts
 
@@ -530,7 +693,13 @@ used the *mean* of those medians to produce the `median_inc` variable.
 ggplot(aes(x = cand_pt, y = median_inc), data = pcf.by_cand_pt) +
   geom_bar(stat = "identity") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+select(pcf.by_cand_pt, cand_pt, median_inc)
 ```
+
+Here we see that the median income of Republican Party contributors is
+$52,633.70 and the median income for Democratic Party contributors is
+$52,504.94.
 
 And let's look by candidate rather than party.
 
@@ -564,11 +733,13 @@ ggplot(aes(x = cand_nm, y = median_amt_per_inc), data = pcf.by_cand_nm) +
 ggplot(aes(x = cand_pt, y = median_amt_per_inc), data = pcf.by_cand_pt) +
   geom_bar(stat = "identity") +
   theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+select(pcf.by_cand_pt, cand_pt, median_amt_per_inc)
 ```
 
 This is a bit more interesting. It looks like Republican supporters may be more
-willing to spend a larger portion of their income on campaign contributions than
-Democrats. Let's look at the box plots.
+willing to spend a larger portion (about 0.1%) of their income on campaign
+contributions than Democrats (about 0.07%). Let's look at the box plots.
 
 ```{r echo=FALSE, Amt_per_Income_Candidate_Boxplots}
 ggplot(aes(x = cand_nm, y = amt_per_income), data = pcf) +
@@ -594,155 +765,7 @@ ggplot(aes(x = cand_pt, y = amt_per_income), data = pcf) +
   coord_cartesian(ylim = c(0,0.0025))
 ```
 
-***
-
-# Univariate Analysis
-
-### What is the structure of your dataset?
-
-There are 15,026 campaign contributions in the dataset to 21 presidential
-candidates. There are 18 variables that characterize each contribution:
-
-- committee ID
-- candidate ID
-- candidate name
-- contributor name
-- contributor city
-- contributor state
-- contributor zip
-- contributor employer
-- contributor occupation
-- contribution receipt amount
-- contribution receipt date
-- receipt description
-- memo code
-- memo text
-- form type
-- file number
-- transaction ID
-- election type/primary general indicator
-
-Detailed descriptions of each of these
-variables can be found in the accompanying *dataDescription.txt* file.
-
-The 21 candidates are:
-
-- Republicans
-    - Jeb Bush
-    - Ben Carson
-    - Chris Christie
-    - Ted Cruz
-    - Carly Fiorina
-    - Lindsey Graham
-    - Mike Huckabee
-    - Bobby Jindal
-    - John Kasich
-    - George Pataki
-    - Rand Paul
-    - Rick Perry
-    - Marco Rubio
-    - Rick Santorum
-    - Donald Trump
-    - Scott Walker
-- Democrats
-    - Hillary Clinton
-    - Lawrence Lessig
-    - Martin O'Malley
-    - Bernie Sanders
-    - James Webb
-
-The data required a bit of cleanup as the minimum contribution amount was
--$5,400. There is no mention in the
-[dataset description](ftp://ftp.fec.gov/FEC/Presidential_Map/2016/DATA_DICTIONARIES/CONTRIBUTOR_FORMAT.txt)
-of why a negative number would be included, so I removed any entries
-with a zero or negative contribution amount.
-
-Additional data was added to give more variables to work with.
-Four additional datasets were joined to the campaign finance dataset.
-
-- Zipcode data from the R zipcode library.
-- The [US Census
-Bureau's](http://factfinder.census.gov/faces/nav/jsf/pages/download_center.xhtml)
-*2015 Population Estimates*, described in *PEP_2015_PEPANNRES.txt*.
-- The [US Census
-Bureau's](http://factfinder.census.gov/faces/nav/jsf/pages/download_center.xhtml)
-*Median Household Income in the
-Past 12 Months (in 2014 Inflation-Adjusted Dollars)*, described in
-*ACS_14_5YR_B19013.txt*.
-- City and county data scraped from
-[Wikipedia](https://en.wikipedia.org/wiki/List_of_cities_in_Nevada) using the
-*dataScraping.py* script.
-
-These additional datasets added (corrected) city names, county names, median
-county incomes, and county population estimates to the data. The lowest median
-county income is $31,530, the highest is $76,560, the median is $51,090, and the
-mean is $52,480. The smallest city population is 0, the largest is 603,500, 
-the mean is 25,990, and
-the median is 1,742. The smallest 2015 county population estimate is 829, the
-largest is 2,115,000, the median is 20,610, and the mean is 180,600.
-
-##### Other Observations
-
-The mean contribution amount is $203.50, the median is $50, and the max is
-$10,800.
-
-Contributions came from donors of 1121 different occupations and 86 cities
-throughout Nevada.
-
-The top 5 candidates in order of number of contributions are:
-
-1. Bernie Sanders
-2. Hillary Clinton
-3. Ted Cruz
-4. Ben Carson
-5. Marco Rubio
-
-The top 5 candidates in order of total amount of contributions are:
-
-1. Hillary Clinton
-2. Marco Rubio
-3. Ted Cruz
-4. Bernie Sanders
-5. Ben Carson
-
-### What is/are the main feature(s) of interest in your dataset?
-
-The main features of interest are the number of contributions, the amount of
-those contributions, who those contributions are going to, and where those
-contributions are from. I also added in population and median income data
-gathered from the US Census Bureau and scraped from Wikipedia.
-
-### What other features in the dataset do you think will help support your investigation into your feature(s) of interest?
-
-It may be interesting to look at which occupations donated to to which political
-party, how many people made multiple contributions, and the timeline of those
-contributions.
-
-### Did you create any new variables from existing variables in the dataset?
-
-Yes. I split the contribution receipt date variable into three variables:
-`year`, `month`, and `day`. I made a further variable called `year_with_months`
-that is a combination of year and month, with the month representing the
-a certain fraction of the year. Political parties for the candidates were also
-missing from the dataset, so I added in a variable, `cand_pt`, to record that
-based on the candidate name.
-
-With the additional data, I created one new variable called `amt_per_income`,
-which gives the contribution amount as a percentage of the median income of the
-county from which that contribution came.
-
-### Of the features you investigated, were there any unusual distributions? Did you perform any operations on the data to tidy, adjust, or change the form of the data? If so, why did you do this?
-
-Although histograms such as number and amount of contributions came out
-decidedly skewed, I did not feel it was appropriate to try to transform the
-data (by converting to a logarithmic scale, for example) because the skewed
-(untransformed) version of the data speaks for itself.
-
-***
-
-# Bivariate Plots Section
-
-Let's start with a scatter plot of contribution amounts vs. median income.
+Next, let's do a scatter plot of contribution amounts vs. median income.
 
 ```{r echo=FALSE, Contribution_Amount_vs_Median_Income}
 ggplot(aes(x = contb_receipt_amt, y = county_income), data = pcf) +
@@ -753,8 +776,10 @@ ggplot(aes(x = contb_receipt_amt, y = county_income), data = pcf) +
 cor.test(pcf$contb_receipt_amt, pcf$county_income)
 ```
 
-There isn't much correlation between income and contribution amount. Let's see
-if counties with a larger population are more likely to have more contributions.
+There isn't much correlation between income and contribution amount.
+The Pearson's correlation coefficient between these two variables is only 0.02.
+Let's see if counties with a larger population are more likely to have more
+contributions.
 
 ```{r echo=FALSE, Number_Contributions_vs_Population}
 ggplot(aes(x = jul2015county_pop_est, y = n), data = pcf.by_county) +
@@ -766,8 +791,10 @@ cor.test(pcf.by_county$n, pcf.by_county$jul2015county_pop_est)
 ```
 
 Not surprisingly, there is a high correlation between county population and the
-number of contributions made. Let's also look at total amount of
-contributions vs population.
+number of contributions made.
+The Pearson's correlation coefficient for these variables is 0.98, which is
+almost is close to being perfectly correlated.
+Let's also look at total amount of contributions vs population.
 
 ```{r echo=FALSE, Total_Contribution_Amount_vs_Population}
 ggplot(aes(x = jul2015county_pop_est, y = total_amt), data = pcf.by_county) +
@@ -835,6 +862,22 @@ ggplot(aes(x = year_with_months), data = pcf) +
 # Bivariate Analysis
 
 ### Talk about some of the relationships you observed in this part of the investigation. How did the feature(s) of interest vary with other features in the dataset?
+
+The top 5 candidates in order of number of contributions are:
+
+1. Bernie Sanders
+2. Hillary Clinton
+3. Ted Cruz
+4. Ben Carson
+5. Marco Rubio
+
+The top 5 candidates in order of total amount of contributions are:
+
+1. Hillary Clinton
+2. Marco Rubio
+3. Ted Cruz
+4. Bernie Sanders
+5. Ben Carson
 
 Population
 was highly correlated with both number and total amount of contributions.
@@ -1047,7 +1090,14 @@ plot.heat(county.map, nv.map, z = "county_income",
                      '$60k - $70k', '$70k - $80k'),
           reverse = TRUE,
           title = 'Median Income')
+
+select(ni, county, county_income)
+summary(ni$county_income)
 ```
+
+Median income by county ranges from $31,530 in Esmeralda County to $76,560 in
+Lander County. The mean of the median incomes is $53,420. It is kind of
+surprising that Clark County (where Las Vegas is) is not at the top of the list!
 
 And let's do the same for population.
 
@@ -1062,7 +1112,16 @@ plot.heat(county.map, nv.map, z = "jul2015county_pop_est",
                      '500,000 - 2,500,000'),
           reverse = TRUE,
           title = 'Population')
+
+select(np, county, jul2015county_pop_est)
+summary(np$jul2015county_pop_est)
 ```
+
+The least populated county is the same as the one with the lowest median income,
+Esmaralda County, with a population of only 829 people. The county with the
+largest population by a wide margin is Clark County (one again, where Las Vegas
+is) with a population of 2,115,000 people. The mean county population is 170,000
+people and the median is 17,020 people.
 
 Next, let's make a few new variables that show the ratio of Democrat to
 Republican.
@@ -1109,7 +1168,18 @@ plot.heat(county.map, nv.map, z = "amt_percent_R",
                      'Mostly Republican', '75% - 100% Republican'),
           title = 'Contribution Amount',
           redblue = TRUE)
+
+options(dplyr.print_max = 16)
+pcf.by_county_amt_ratio
 ```
+
+The county that contributed the biggest percentage of total dollars to the
+Democratic Party was Storey County with 97% of the contribution money going to
+Democrats.
+The county that contributed the biggest percentage of total dollars to the
+Republican Party was a three-way tie between Esmeralda County, Lander County,
+and Lyon County with 100% of the contribution money going to
+Republicans.
 
 Next, let's do the same for the total number of contributions.
 
@@ -1123,7 +1193,14 @@ plot.heat(county.map, nv.map, z = "n_percent_R",
                      'Mostly Republican', '75% - 100% Republican'),
           title = 'Number of Contributions',
           redblue = TRUE)
+
+pcf.by_county_n_ratio
+options(dplyr.print_max = 10)
 ```
+
+Perhaps unsurprisingly, the counties with the highest *number* of contributions
+to Democrats and Republicans are also the counties with the highest *amount* of
+contributions.
 
 As we saw in the univariate analysis section, Republicans have a big lead in
 total amount of contributions, but when it comes to total *number* of
@@ -1182,6 +1259,9 @@ get much more per contribution than the other candidates here and Bernie Sanders
 tends to get less per contribution. Interestingly, of these 5, Marco Rubio has
 the *fewest* contributions, and Bernie Sanders has the *most*.
 
+For comparison, the overall median contribution amount was $50, the mean was
+$203.50, and the max was $10,800.
+
 ### Plot Two
 ```{r echo=FALSE, Plot_Two}
 names(pcf.by_county_party)[names(pcf.by_county_party) == "cand_pt"] <- "Party"
@@ -1203,7 +1283,12 @@ surprising that the number of contributions increases with population, the
 interesting thing is the cross-over in the plots--there is a larger proportion
 of contributions that go to Republican Party candidates when population is
 small, but at about a population of 200,000, the trend switches and people are
-more likely to contribute to Democratic Party candidates.
+more likely to contribute to Democratic Party candidates. For example, Clark
+County and Washoe County have the largest populations in Nevada and contributed
+50.2% and 53.7% respectively to the Democratic Party, while Esmeralda County 
+has the smallest populations and contributed 100% to the Republican Party. (The
+county with the second highest population, Eureka County, made no contributions
+to either party.)
 
 ### Plot Three
 ```{r echo=FALSE, Plot_Three}
@@ -1256,6 +1341,16 @@ lower populations tended to contribute the other way. I think that this sort of
 unexpected realization is at the core of why exploratory data analysis is
 important--sometimes the most meaningful relationships come out where you least
 expect them to.
+
+Future work that could be performed on this data set could be to take a look at
+the numbers for each party leading up to each presidential election. For
+example, for this election, the Republicans have a higher number contributions
+and a higher total amount of contributions in Nevada compared to the Democrats,
+but what did the numbers look like in 2004, 2008, and 2012? Also, for the few
+candidates that run in multiple election years, it would be interesting to see
+if they did any better the second time around. Along these same lines, it would
+also be interesting to see if different occupations support different parties in
+different elections or if they tend to stick to the same parties.
 
 Overall, I felt that I learned a lot in the Exploratory Data Analysis course and
 this project. I learned that sometimes doing something that seems like it should
